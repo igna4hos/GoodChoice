@@ -1,17 +1,14 @@
-//
-//  GoodChoiceApp.swift
-//  GoodChoice
-//
-//  Created by Ignat Kolesnikov on 16.04.2026.
-//
-
 import SwiftUI
 
 @main
 struct GoodChoiceApp: App {
+    @StateObject private var store = AppStore()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(store)
+                .environment(\.locale, store.language.locale)
         }
     }
 }
