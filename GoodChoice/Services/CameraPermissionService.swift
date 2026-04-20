@@ -4,7 +4,7 @@ import Foundation
 
 @MainActor
 final class CameraPermissionService: ObservableObject {
-    enum Status {
+    enum Status: Equatable {
         case idle
         case requesting
         case granted

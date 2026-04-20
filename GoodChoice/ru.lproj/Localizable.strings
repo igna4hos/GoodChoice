@@ -41,9 +41,13 @@
 "scan.permission.denied.message" = "Включите камеру в Настройках, чтобы открыть экран сканера и запустить имитацию штрихкода.";
 "scan.permission.openSettings" = "Открыть настройки";
 "scan.align.title" = "Поместите штрихкод в рамку";
+"scan.align.center" = "Поместите штрихкод в центр рамки.";
 "scan.align.message" = "Держите упаковку ровно. GoodChoice через несколько секунд имитирует успешный скан.";
 "scan.align.detected" = "Штрихкод найден. Готовим персональный результат.";
 "scan.align.caption" = "Зона размещения штрихкода";
+"scan.camera.badge" = "Камера";
+"scan.camera.demo" = "Демо-полка с хлопьями";
+"scan.camera.demo.subtitle" = "Этот mock-сканер через короткий live-просмотр автоматически анализирует хлопья и сухие завтраки.";
 "scan.action.continue" = "Продолжить";
 "scan.action.history" = "В историю";
 "scan.reasoning.title" = "Почему такой результат";
@@ -245,6 +249,16 @@
 "detail.scalp.audience" = "Жирная кожа головы";
 "detail.dryhair.audience" = "Сухие и поврежденные волосы";
 "detail.everyday.audience" = "Ежедневное использование";
+"detail.washing.capsules.type" = "Капсулы для стирки";
+"detail.washing.sensitive.type" = "Капсулы для стирки чувствительных тканей";
+"detail.washing.family.audience" = "Семейная стирка и смешанные ежедневные загрузки";
+"detail.washing.color.audience" = "Цветные ткани и активные домашние рутины";
+"detail.washing.sensitive.audience" = "Чувствительная кожа и деликатные ткани";
+"detail.washing.everyday.audience" = "Повседневная одежда и постельное белье";
+"detail.washing.ariel.purpose" = "Сильное удаление пятен для смешанных домашних загрузок.";
+"detail.washing.bimax.purpose" = "Капсулы для яркой стирки цветного белья с более выраженной парфюмерной нотой.";
+"detail.washing.lamm.purpose" = "Более мягкие капсулы для чувствительной кожи и меньшей отдушки.";
+"detail.washing.losk.purpose" = "Сбалансированные капсулы для ежедневной стирки и контроля запаха.";
 
 "product.flakes.kosmostars.name" = "Kosmostars Honey Rings";
 "product.flakes.kosmostars.description" = "Сладкие кольца для завтрака с игривым профилем и довольно высоким сахаром.";
@@ -278,6 +292,14 @@
 "product.shampoo.jojo.description" = "Восстанавливающий шампунь с силиконами для более гладкого финиша.";
 "product.shampoo.vois.name" = "Vois Daily Balance Shampoo";
 "product.shampoo.vois.description" = "Ежедневный шампунь с более чистым бессульфатным составом.";
+"product.washing.ariel.name" = "Ariel All-in-1 Pods";
+"product.washing.ariel.description" = "Капсулы для стирки с сильным очищением, но более выраженным ароматизированным профилем.";
+"product.washing.bimax.name" = "BiMax Color Capsules";
+"product.washing.bimax.description" = "Капсулы для цветного белья с более яркими ароматическими добавками и более низким баллом для чувствительной кожи.";
+"product.washing.lamm.name" = "Lamm Sensitive Capsules";
+"product.washing.lamm.description" = "Капсулы для чувствительного белья с более спокойным профилем и более чистым составом.";
+"product.washing.losk.name" = "Losk Fresh Capsules";
+"product.washing.losk.description" = "Повседневные капсулы для стирки с балансом между удалением пятен, свежестью и умеренной раздражающей нагрузкой.";
 
 "highlight.kidsFavorite" = "Привычный детям вариант";
 "highlight.wholeGrains" = "Более удачный зерновой профиль";
@@ -299,3 +321,7 @@
 "highlight.antiDandruff" = "Фокус на коже головы";
 "highlight.repairCare" = "Восстанавливающий уход";
 "highlight.sulfateFree" = "Без сульфатов";
+"highlight.deepClean" = "Глубокое очищение";
+"highlight.colorProtection" = "Защита цвета";
+"highlight.hypoallergenicLaundry" = "Профиль с меньшим риском раздражения";
+"highlight.quickDissolve" = "Быстро растворяющаяся оболочка";

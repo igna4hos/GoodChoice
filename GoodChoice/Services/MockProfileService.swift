@@ -35,8 +35,10 @@ final class MockProfileService {
                         sugarTracking: true,
                         scanHistory: [
                             ScanRecord(productBarcode: "460200000008", scannedAt: daysAgo(1, hour: 8)),
+                            ScanRecord(productBarcode: "460200000019", scannedAt: daysAgo(1, hour: 18)),
                             ScanRecord(productBarcode: "460200000003", scannedAt: daysAgo(2, hour: 18)),
                             ScanRecord(productBarcode: "460200000010", scannedAt: daysAgo(3, hour: 11)),
+                            ScanRecord(productBarcode: "460200000017", scannedAt: daysAgo(4, hour: 19)),
                             ScanRecord(productBarcode: "460200000014", scannedAt: daysAgo(5, hour: 9)),
                             ScanRecord(productBarcode: "460200000005", scannedAt: daysAgo(7, hour: 13)),
                             ScanRecord(productBarcode: "460200000012", scannedAt: daysAgo(9, hour: 17)),
@@ -82,8 +84,10 @@ final class MockProfileService {
                         sugarTracking: false,
                         scanHistory: [
                             ScanRecord(productBarcode: "460200000013", scannedAt: daysAgo(1, hour: 20)),
+                            ScanRecord(productBarcode: "460200000020", scannedAt: daysAgo(2, hour: 8)),
                             ScanRecord(productBarcode: "460200000015", scannedAt: daysAgo(3, hour: 7)),
                             ScanRecord(productBarcode: "460200000011", scannedAt: daysAgo(5, hour: 14)),
+                            ScanRecord(productBarcode: "460200000018", scannedAt: daysAgo(6, hour: 11)),
                             ScanRecord(productBarcode: "460200000016", scannedAt: daysAgo(7, hour: 19)),
                             ScanRecord(productBarcode: "460200000009", scannedAt: daysAgo(10, hour: 9)),
                             ScanRecord(productBarcode: "460200000010", scannedAt: daysAgo(15, hour: 17))
@@ -112,8 +116,10 @@ final class MockProfileService {
                         sugarTracking: true,
                         scanHistory: [
                             ScanRecord(productBarcode: "460200000010", scannedAt: daysAgo(1, hour: 10)),
+                            ScanRecord(productBarcode: "460200000019", scannedAt: daysAgo(2, hour: 9)),
                             ScanRecord(productBarcode: "460200000012", scannedAt: daysAgo(2, hour: 18)),
                             ScanRecord(productBarcode: "460200000014", scannedAt: daysAgo(4, hour: 12)),
+                            ScanRecord(productBarcode: "460200000017", scannedAt: daysAgo(5, hour: 20)),
                             ScanRecord(productBarcode: "460200000016", scannedAt: daysAgo(6, hour: 19)),
                             ScanRecord(productBarcode: "460200000006", scannedAt: daysAgo(8, hour: 8)),
                             ScanRecord(productBarcode: "460200000007", scannedAt: daysAgo(12, hour: 16)),

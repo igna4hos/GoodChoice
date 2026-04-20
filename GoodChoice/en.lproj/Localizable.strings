@@ -41,9 +41,13 @@
 "scan.permission.denied.message" = "Enable camera access in Settings to open the scanner surface and run the simulated barcode flow.";
 "scan.permission.openSettings" = "Open Settings";
 "scan.align.title" = "Place the barcode inside the frame";
+"scan.align.center" = "Place the barcode in the center of the frame.";
 "scan.align.message" = "Hold the package steady. GoodChoice will simulate a scan in a few seconds.";
 "scan.align.detected" = "Barcode detected. Preparing your personalized result.";
 "scan.align.caption" = "Barcode placement area";
+"scan.camera.badge" = "Live Camera";
+"scan.camera.demo" = "Flakes demo shelf";
+"scan.camera.demo.subtitle" = "This mock scanner automatically analyzes cereal and flakes after a short live preview.";
 "scan.action.continue" = "Continue";
 "scan.action.history" = "History";
 "scan.reasoning.title" = "Personalized reasoning";
@@ -245,6 +249,16 @@
 "detail.scalp.audience" = "Oily scalp";
 "detail.dryhair.audience" = "Dry or damaged hair";
 "detail.everyday.audience" = "Everyday use";
+"detail.washing.capsules.type" = "Laundry capsules";
+"detail.washing.sensitive.type" = "Sensitive-skin laundry capsules";
+"detail.washing.family.audience" = "Family laundry and mixed daily loads";
+"detail.washing.color.audience" = "Color fabrics and active households";
+"detail.washing.sensitive.audience" = "Sensitive skin and delicate fabrics";
+"detail.washing.everyday.audience" = "Everyday clothing and bed linen";
+"detail.washing.ariel.purpose" = "Strong stain removal for mixed household loads.";
+"detail.washing.bimax.purpose" = "Bright-wash capsule for colorful laundry with a stronger perfume profile.";
+"detail.washing.lamm.purpose" = "Gentler capsule for sensitive skin and lighter fragrance exposure.";
+"detail.washing.losk.purpose" = "Balanced capsule for daily washing and odor control.";
 
 "product.flakes.kosmostars.name" = "Kosmostars Honey Rings";
 "product.flakes.kosmostars.description" = "Sweet cereal rings with a playful profile and a relatively high sugar load.";
@@ -278,6 +292,14 @@
 "product.shampoo.jojo.description" = "Repair-focused shampoo with silicones for a smoother finish.";
 "product.shampoo.vois.name" = "Vois Daily Balance Shampoo";
 "product.shampoo.vois.description" = "Daily shampoo with a cleaner sulfate-free composition.";
+"product.washing.ariel.name" = "Ariel All-in-1 Pods";
+"product.washing.ariel.description" = "Laundry capsules with strong cleaning power, but a more perfumed household profile.";
+"product.washing.bimax.name" = "BiMax Color Capsules";
+"product.washing.bimax.description" = "Color-focused laundry capsules with brighter scent additives and a lower sensitive-skin score.";
+"product.washing.lamm.name" = "Lamm Sensitive Capsules";
+"product.washing.lamm.description" = "Sensitive-laundry capsules with a calmer profile and cleaner composition.";
+"product.washing.losk.name" = "Losk Fresh Capsules";
+"product.washing.losk.description" = "Everyday laundry capsules balancing stain removal, freshness, and a moderate irritant load.";
 
 "highlight.kidsFavorite" = "Shelf-friendly kids appeal";
 "highlight.wholeGrains" = "Better grain profile";
@@ -299,4 +321,7 @@
 "highlight.antiDandruff" = "Scalp-control focus";
 "highlight.repairCare" = "Repair-focused wash";
 "highlight.sulfateFree" = "Sulfate-free";
-
+"highlight.deepClean" = "Deep-cleaning performance";
+"highlight.colorProtection" = "Color protection";
+"highlight.hypoallergenicLaundry" = "Lower-irritation laundry profile";
+"highlight.quickDissolve" = "Quick-dissolve capsule shell";

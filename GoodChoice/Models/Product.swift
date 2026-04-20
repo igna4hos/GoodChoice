@@ -48,6 +48,7 @@ enum ProductKind: String, Hashable {
     case yogurt
     case cream
     case shampoo
+    case washing
 }
 
 enum ProductDetails: Hashable {

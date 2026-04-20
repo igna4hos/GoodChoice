@@ -3,6 +3,7 @@ import UIKit
 
 struct ScanView: View {
     @EnvironmentObject private var store: AppStore
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var cameraPermission = CameraPermissionService()
 
     @State private var flashlightOn = false
@@ -14,9 +15,13 @@ struct ScanView: View {
         store.products.filter { $0.kind == .flakes }
     }
 
+    private var previewProduct: Product? {
+        targets.first
+    }
+
     var body: some View {
         ZStack {
-            AppTheme.background.ignoresSafeArea()
+            cameraBackdrop
 
             switch cameraPermission.status {
             case .idle, .requesting:
@@ -27,19 +32,7 @@ struct ScanView: View {
                 scannerContent
             }
         }
-        .navigationTitle(Text("scan.title"))
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    flashlightOn.toggle()
-                } label: {
-                    Image(systemName: flashlightOn ? "flashlight.on.fill" : "flashlight.off.fill")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(flashlightOn ? AppTheme.orange : .primary)
-                }
-                .disabled(cameraPermission.status != .granted)
-            }
-        }
+        .toolbar(.hidden, for: .navigationBar)
         .sheet(item: $selectedEvaluation) { evaluation in
             ProductEvaluationSheet(
                 evaluation: evaluation,
@@ -55,94 +48,171 @@ struct ScanView: View {
             )
             .environmentObject(store)
         }
-        .task {
-            await cameraPermission.requestAccessIfNeeded()
-            if cameraPermission.status == .granted {
-                startScanning()
+        .onAppear {
+            Task {
+                await updateScannerState()
             }
         }
         .onDisappear {
-            scanTask?.cancel()
+            stopScanning(resetResult: true)
         }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-            cameraPermission.refresh()
-            if cameraPermission.status == .granted {
-                startScanning()
+        .onChange(of: store.selectedTab) { _, _ in
+            Task {
+                await updateScannerState()
             }
         }
+        .onChange(of: scenePhase) { _, _ in
+            Task {
+                await updateScannerState()
+            }
+        }
+    }
+
+    private var cameraBackdrop: some View {
+        GeometryReader { geometry in
+            ZStack {
+                if let previewProduct {
+                    Image(previewProduct.imageName)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .saturation(flashlightOn ? 0.95 : 0.68)
+                        .blur(radius: scanPhase == .found ? 12 : 18)
+                        .overlay(Color.black.opacity(flashlightOn ? 0.26 : 0.44))
+                } else {
+                    LinearGradient(
+                        colors: [Color.black, Color(red: 0.12, green: 0.14, blue: 0.18)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+
+                RoundedRectangle(cornerRadius: 280, style: .continuous)
+                    .fill(
+                        RadialGradient(
+                            colors: [Color.white.opacity(flashlightOn ? 0.18 : 0.04), .clear],
+                            center: .center,
+                            startRadius: 24,
+                            endRadius: 420
+                        )
+                    )
+                    .scaleEffect(1.35)
+
+                LinearGradient(
+                    colors: [Color.black.opacity(0.72), Color.clear, Color.black.opacity(0.82)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+
+                cameraFeedDecor
+            }
+            .ignoresSafeArea()
+        }
+    }
+
+    private var cameraFeedDecor: some View {
+        VStack {
+            HStack(spacing: 18) {
+                feedPill(width: 124)
+                Spacer()
+                feedPill(width: 74)
+            }
+            .padding(.horizontal, 28)
+            .padding(.top, 104)
+
+            Spacer()
+
+            HStack(spacing: 14) {
+                feedThumbnail(imageName: "products.flakes.kosmostars", angle: -7)
+                feedThumbnail(imageName: "products.flakes.khrutka", angle: 3)
+                feedThumbnail(imageName: "products.flakes.oreo", angle: 8)
+                feedThumbnail(imageName: "products.flakes.redprice", angle: -5)
+            }
+            .padding(.bottom, 164)
+        }
+    }
+
+    private func feedPill(width: CGFloat) -> some View {
+        Capsule(style: .continuous)
+            .fill(Color.white.opacity(0.08))
+            .frame(width: width, height: 16)
+            .blur(radius: 0.5)
+    }
+
+    private func feedThumbnail(imageName: String, angle: Double) -> some View {
+        ProductImageView(imageName: imageName, width: 62, height: 90, cornerRadius: 20)
+            .rotationEffect(.degrees(angle))
+            .opacity(0.58)
+            .blur(radius: 0.4)
     }
 
     private var scannerContent: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(spacing: 22) {
-                scannerHeader
-                scannerFrame
-                targetsShelf
-                statusPanel
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                topBar
+                Spacer(minLength: 24)
+                scannerFrame(width: min(geometry.size.width - 48, 320))
+                Spacer()
+                bottomPanel
             }
             .padding(.horizontal, 20)
-            .padding(.top, 12)
-            .padding(.bottom, 32)
+            .padding(.top, 14)
+            .padding(.bottom, 96)
         }
     }
 
-    private var scannerHeader: some View {
-        PremiumCard(padding: 20) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("scan.hero.title")
-                            .font(.title2.bold())
-                        Text("scan.hero.subtitle")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    if let remaining = store.freeScansRemaining {
-                        Text(store.localized("scan.free.remaining", remaining))
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(AppTheme.orange)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(AppTheme.orange.opacity(0.12))
-                            )
-                    }
-                }
+    private var topBar: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("scan.camera.badge")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.76))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.white.opacity(0.12), in: Capsule(style: .continuous))
 
-                HStack(spacing: 10) {
-                    statusChip(icon: "person.badge.shield.checkmark", text: store.localized(store.currentTier.titleKey), tint: AppTheme.green)
-                    statusChip(icon: "camera.metering.center.weighted", text: store.localized("scan.status.alignment"), tint: AppTheme.orange)
-                }
+                Text("scan.title")
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
             }
+
+            Spacer()
+
+            Button {
+                flashlightOn.toggle()
+            } label: {
+                Image(systemName: flashlightOn ? "flashlight.on.fill" : "flashlight.off.fill")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(flashlightOn ? AppTheme.orange : .white)
+                    .frame(width: 52, height: 52)
+                    .background(
+                        Circle()
+                            .fill(Color.white.opacity(0.14))
+                            .overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(cameraPermission.status != .granted)
         }
     }
 
-    private var scannerFrame: some View {
-        PremiumCard(padding: 16) {
+    private func scannerFrame(width: CGFloat) -> some View {
+        VStack(spacing: 18) {
             ZStack {
-                RoundedRectangle(cornerRadius: 30, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: flashlightOn
-                                ? [Color(red: 0.20, green: 0.24, blue: 0.28), Color(red: 0.28, green: 0.32, blue: 0.29)]
-                                : [Color(red: 0.12, green: 0.14, blue: 0.18), Color(red: 0.17, green: 0.22, blue: 0.20)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
+                RoundedRectangle(cornerRadius: 34, style: .continuous)
+                    .fill(Color.black.opacity(0.16))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 34, style: .continuous)
+                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
                     )
-                    .frame(height: 430)
+                    .frame(width: width, height: 208)
 
-                RoundedRectangle(cornerRadius: 30, style: .continuous)
-                    .fill(Color.white.opacity(flashlightOn ? 0.05 : 0.0))
-                    .frame(height: 430)
+                ScannerCornerMarks(color: scanPhase == .found ? AppTheme.green : AppTheme.orange)
+                    .frame(width: width, height: 208)
 
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                    .frame(height: 430)
-
-                alignmentArea
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(scanPhase == .found ? AppTheme.green.opacity(0.92) : AppTheme.orange.opacity(0.92), style: StrokeStyle(lineWidth: 2, dash: [12, 8]))
+                    .frame(width: width - 42, height: 154)
 
                 if scanPhase != .idle {
                     Rectangle()
@@ -153,107 +223,92 @@ struct ScanView: View {
                                 endPoint: .trailing
                             )
                         )
-                        .frame(height: 4)
-                        .padding(.horizontal, 54)
-                        .offset(y: scanPhase == .found ? 0 : -6)
-                        .animation(.easeInOut(duration: 0.7), value: scanPhase)
+                        .frame(width: width - 54, height: 4)
+                        .shadow(color: (scanPhase == .found ? AppTheme.green : AppTheme.orange).opacity(0.45), radius: 16, x: 0, y: 4)
+                        .transition(.opacity)
                 }
 
-                VStack(spacing: 16) {
-                    Spacer()
-                    Text("scan.align.title")
+                VStack(spacing: 10) {
+                    Image(systemName: "barcode.viewfinder")
+                        .font(.system(size: 38, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.92))
+                    Text("scan.align.caption")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.72))
+                }
+            }
+
+            Text(scanPhase == .found ? "scan.align.detected" : "scan.align.center")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.white.opacity(0.92))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+        }
+    }
+
+    private var bottomPanel: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("scan.camera.demo")
                         .font(.headline)
                         .foregroundStyle(.white)
-                    Text(scanPhase == .found ? "scan.align.detected" : "scan.align.message")
+                    Text("scan.camera.demo.subtitle")
                         .font(.subheadline)
                         .foregroundStyle(.white.opacity(0.72))
-                        .multilineTextAlignment(.center)
-                    Spacer()
                 }
-                .padding(.horizontal, 40)
+                Spacer()
+                if let remaining = store.freeScansRemaining {
+                    Text(store.localized("scan.free.remaining", remaining))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppTheme.orange)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(AppTheme.orange.opacity(0.14), in: Capsule(style: .continuous))
+                }
             }
-        }
-    }
 
-    private var alignmentArea: some View {
-        VStack {
-            Spacer()
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .stroke(scanPhase == .found ? AppTheme.green : AppTheme.orange, style: StrokeStyle(lineWidth: 2, dash: [14, 10]))
-                .frame(width: 270, height: 178)
-                .overlay {
-                    VStack(spacing: 10) {
-                        Image(systemName: "barcode.viewfinder")
-                            .font(.system(size: 34, weight: .semibold))
-                            .foregroundStyle(scanPhase == .found ? AppTheme.green : AppTheme.orange)
-                        Text("scan.align.caption")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.white.opacity(0.75))
-                    }
-                }
-            Spacer()
-        }
-    }
+            if let account = store.currentAccount, let profile = store.currentProfile {
+                Text(store.localized("scan.status.user", "\(account.firstName) \(account.lastName)", profile.name))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.76))
+            }
 
-    private var targetsShelf: some View {
-        PremiumCard(padding: 20) {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("scan.targets.title")
-                    .font(.headline)
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        ForEach(targets) { product in
-                            Button {
-                                triggerManualScan(product)
-                            } label: {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    ProductImageView(imageName: product.imageName, width: 112, height: 112, cornerRadius: 22)
-                                    Text(store.localized(product.nameKey))
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.primary)
-                                        .frame(width: 112, alignment: .leading)
-                                        .lineLimit(2)
-                                }
-                            }
-                            .buttonStyle(.plain)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(targets) { product in
+                        Button {
+                            triggerManualScan(product)
+                        } label: {
+                            ProductImageView(imageName: product.imageName, width: 66, height: 94, cornerRadius: 18)
                         }
+                        .buttonStyle(.plain)
                     }
                 }
             }
         }
-    }
-
-    private var statusPanel: some View {
-        PremiumCard(padding: 22) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("scan.status.title")
-                    .font(.headline)
-
-                if let account = store.currentAccount, let profile = store.currentProfile {
-                    Text(store.localized("scan.status.user", "\(account.firstName) \(account.lastName)", profile.name))
-                        .font(.subheadline.weight(.semibold))
-                    Text("scan.status.message")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("scan.signedOut")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                )
+        )
     }
 
     private var loadingState: some View {
         VStack(spacing: 18) {
             ProgressView()
                 .progressViewStyle(.circular)
+                .tint(.white)
             Text("scan.permission.requesting")
                 .font(.headline)
+                .foregroundStyle(.white)
             Text("scan.permission.message")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.72))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
         }
@@ -289,34 +344,44 @@ struct ScanView: View {
         }
     }
 
-    private func statusChip(icon: String, text: String, tint: Color) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon)
-            Text(text)
+    private func updateScannerState() async {
+        guard store.selectedTab == .scan else {
+            stopScanning(resetResult: true)
+            return
         }
-        .font(.caption.weight(.semibold))
-        .foregroundStyle(tint)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(
-            Capsule(style: .continuous)
-                .fill(tint.opacity(0.12))
-        )
+
+        guard scenePhase == .active else {
+            stopScanning(resetResult: false)
+            return
+        }
+
+        await cameraPermission.requestAccessIfNeeded()
+        guard cameraPermission.status == .granted else {
+            stopScanning(resetResult: true)
+            return
+        }
+
+        guard selectedEvaluation == nil else { return }
+        startScanning()
     }
 
     private func startScanning() {
-        guard cameraPermission.status == .granted else { return }
+        guard isAutoScanActive else { return }
         scanTask?.cancel()
         scanPhase = .idle
 
         scanTask = Task {
             try? await Task.sleep(for: .seconds(3))
             guard !Task.isCancelled else { return }
+            let isStillActive = await MainActor.run { isAutoScanActive }
+            guard isStillActive else { return }
             await MainActor.run {
                 scanPhase = .found
             }
             try? await Task.sleep(for: .milliseconds(650))
             guard !Task.isCancelled else { return }
+            let isReadyForResult = await MainActor.run { isAutoScanActive }
+            guard isReadyForResult else { return }
             await MainActor.run {
                 triggerManualScan()
             }
@@ -334,6 +399,20 @@ struct ScanView: View {
         scanPhase = .idle
     }
 
+    private func stopScanning(resetResult: Bool) {
+        scanTask?.cancel()
+        scanTask = nil
+        scanPhase = .idle
+        flashlightOn = false
+        if resetResult {
+            selectedEvaluation = nil
+        }
+    }
+
+    private var isAutoScanActive: Bool {
+        cameraPermission.status == .granted && store.selectedTab == .scan && scenePhase == .active && selectedEvaluation == nil
+    }
+
     private func openSettings() {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
@@ -343,4 +422,38 @@ struct ScanView: View {
 private enum ScanPhase {
     case idle
     case found
+}
+
+private struct ScannerCornerMarks: View {
+    let color: Color
+
+    var body: some View {
+        GeometryReader { geometry in
+            let cornerLength: CGFloat = 34
+            let lineWidth: CGFloat = 4
+
+            Path { path in
+                let width = geometry.size.width
+                let height = geometry.size.height
+
+                path.move(to: CGPoint(x: 0, y: cornerLength))
+                path.addLine(to: CGPoint(x: 0, y: 0))
+                path.addLine(to: CGPoint(x: cornerLength, y: 0))
+
+                path.move(to: CGPoint(x: width - cornerLength, y: 0))
+                path.addLine(to: CGPoint(x: width, y: 0))
+                path.addLine(to: CGPoint(x: width, y: cornerLength))
+
+                path.move(to: CGPoint(x: 0, y: height - cornerLength))
+                path.addLine(to: CGPoint(x: 0, y: height))
+                path.addLine(to: CGPoint(x: cornerLength, y: height))
+
+                path.move(to: CGPoint(x: width - cornerLength, y: height))
+                path.addLine(to: CGPoint(x: width, y: height))
+                path.addLine(to: CGPoint(x: width, y: height - cornerLength))
+            }
+            .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
+            .shadow(color: color.opacity(0.28), radius: 16, x: 0, y: 0)
+        }
+    }
 }

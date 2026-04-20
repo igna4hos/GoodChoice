@@ -18,7 +18,9 @@ struct AnalyticsView: View {
                 if store.isSignedIn {
                     header
                     summaryCards
-                    pieChartCard
+                    if selectedCategory == nil {
+                        pieChartCard
+                    }
                     trendCard
                     categoryCard
                     insightGrid

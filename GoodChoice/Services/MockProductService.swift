@@ -380,6 +380,86 @@ final class MockProductService {
                     AlternativeSuggestion(productBarcode: "460200000013", reasonKey: "alternative.gentlerUse"),
                     AlternativeSuggestion(productBarcode: "460200000015", reasonKey: "alternative.lowerIrritation")
                 ]
+            ),
+            Product(
+                barcode: "460200000017",
+                nameKey: "product.washing.ariel.name",
+                imageName: "products.washing.ariel",
+                category: .household,
+                kind: .washing,
+                genericScore: 64,
+                descriptionKey: "product.washing.ariel.description",
+                highlightKeys: ["highlight.deepClean", "highlight.quickDissolve"],
+                sensitivityTokens: [HealthToken.fragrance.rawValue, HealthToken.colorants.rawValue],
+                details: .care(ProductCareDetails(
+                    typeKey: "detail.washing.capsules.type",
+                    audienceKey: "detail.washing.family.audience",
+                    purposeKey: "detail.washing.ariel.purpose"
+                )),
+                alternativeSuggestions: [
+                    AlternativeSuggestion(productBarcode: "460200000019", reasonKey: "alternative.cleanerIngredients"),
+                    AlternativeSuggestion(productBarcode: "460200000020", reasonKey: "alternative.betterComposition")
+                ]
+            ),
+            Product(
+                barcode: "460200000018",
+                nameKey: "product.washing.bimax.name",
+                imageName: "products.washing.bimax",
+                category: .household,
+                kind: .washing,
+                genericScore: 49,
+                descriptionKey: "product.washing.bimax.description",
+                highlightKeys: ["highlight.colorProtection"],
+                sensitivityTokens: [HealthToken.fragrance.rawValue, HealthToken.colorants.rawValue, HealthToken.essentialOils.rawValue],
+                details: .care(ProductCareDetails(
+                    typeKey: "detail.washing.capsules.type",
+                    audienceKey: "detail.washing.color.audience",
+                    purposeKey: "detail.washing.bimax.purpose"
+                )),
+                alternativeSuggestions: [
+                    AlternativeSuggestion(productBarcode: "460200000019", reasonKey: "alternative.lowerIrritation"),
+                    AlternativeSuggestion(productBarcode: "460200000017", reasonKey: "alternative.cleanerIngredients")
+                ]
+            ),
+            Product(
+                barcode: "460200000019",
+                nameKey: "product.washing.lamm.name",
+                imageName: "products.washing.lamm",
+                category: .household,
+                kind: .washing,
+                genericScore: 85,
+                descriptionKey: "product.washing.lamm.description",
+                highlightKeys: ["highlight.hypoallergenicLaundry", "highlight.cleanerComposition"],
+                sensitivityTokens: [HealthToken.essentialOils.rawValue],
+                details: .care(ProductCareDetails(
+                    typeKey: "detail.washing.sensitive.type",
+                    audienceKey: "detail.washing.sensitive.audience",
+                    purposeKey: "detail.washing.lamm.purpose"
+                )),
+                alternativeSuggestions: [
+                    AlternativeSuggestion(productBarcode: "460200000020", reasonKey: "alternative.cleanerIngredients"),
+                    AlternativeSuggestion(productBarcode: "460200000017", reasonKey: "alternative.lowerIrritation")
+                ]
+            ),
+            Product(
+                barcode: "460200000020",
+                nameKey: "product.washing.losk.name",
+                imageName: "products.washing.losk",
+                category: .household,
+                kind: .washing,
+                genericScore: 68,
+                descriptionKey: "product.washing.losk.description",
+                highlightKeys: ["highlight.deepClean", "highlight.colorProtection"],
+                sensitivityTokens: [HealthToken.fragrance.rawValue, HealthToken.alcohol.rawValue],
+                details: .care(ProductCareDetails(
+                    typeKey: "detail.washing.capsules.type",
+                    audienceKey: "detail.washing.everyday.audience",
+                    purposeKey: "detail.washing.losk.purpose"
+                )),
+                alternativeSuggestions: [
+                    AlternativeSuggestion(productBarcode: "460200000019", reasonKey: "alternative.cleanerIngredients"),
+                    AlternativeSuggestion(productBarcode: "460200000017", reasonKey: "alternative.betterComposition")
+                ]
             )
         ]
     }
