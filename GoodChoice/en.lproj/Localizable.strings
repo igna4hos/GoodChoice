@@ -45,6 +45,8 @@
 "scan.align.message" = "Hold the package steady. GoodChoice will simulate a scan in a few seconds.";
 "scan.align.detected" = "Barcode detected. Preparing your personalized result.";
 "scan.align.caption" = "Barcode placement area";
+"scan.camera.ready" = "Place frame on barcode";
+"scan.camera.scanning" = "Analyzing the barcode and matching it with your profile";
 "scan.camera.badge" = "Live Camera";
 "scan.camera.demo" = "Flakes demo shelf";
 "scan.camera.demo.subtitle" = "This mock scanner automatically analyzes cereal and flakes after a short live preview.";

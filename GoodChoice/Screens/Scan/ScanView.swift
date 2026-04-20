@@ -5,11 +5,13 @@ struct ScanView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var cameraPermission = CameraPermissionService()
+    @StateObject private var cameraSession = CameraSessionService()
 
     @State private var flashlightOn = false
     @State private var selectedEvaluation: ProductEvaluation?
     @State private var scanTask: Task<Void, Never>?
     @State private var scanPhase: ScanPhase = .idle
+    @State private var scanLineProgress: CGFloat = 0
 
     private var targets: [Product] {
         store.products.filter { $0.kind == .flakes }
@@ -21,7 +23,7 @@ struct ScanView: View {
 
     var body: some View {
         ZStack {
-            cameraBackdrop
+            cameraBackground
 
             switch cameraPermission.status {
             case .idle, .requesting:
@@ -29,7 +31,7 @@ struct ScanView: View {
             case .denied:
                 permissionDeniedState
             case .granted:
-                scannerContent
+                scannerChrome
             }
         }
         .toolbar(.hidden, for: .navigationBar)
@@ -68,7 +70,33 @@ struct ScanView: View {
         }
     }
 
-    private var cameraBackdrop: some View {
+    private var cameraBackground: some View {
+        ZStack {
+            if cameraPermission.status == .granted, cameraSession.isPreviewAvailable {
+                CameraPreviewView(session: cameraSession.session)
+                    .ignoresSafeArea()
+            } else {
+                fallbackPreview
+            }
+
+            LinearGradient(
+                colors: [Color.black.opacity(0.52), Color.clear, Color.black.opacity(0.74)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            RadialGradient(
+                colors: [Color.white.opacity(flashlightOn ? 0.16 : 0.03), .clear],
+                center: .center,
+                startRadius: 12,
+                endRadius: 340
+            )
+            .ignoresSafeArea()
+        }
+    }
+
+    private var fallbackPreview: some View {
         GeometryReader { geometry in
             ZStack {
                 if let previewProduct {
@@ -76,9 +104,9 @@ struct ScanView: View {
                         .resizable()
                         .scaledToFill()
                         .frame(width: geometry.size.width, height: geometry.size.height)
-                        .saturation(flashlightOn ? 0.95 : 0.68)
-                        .blur(radius: scanPhase == .found ? 12 : 18)
-                        .overlay(Color.black.opacity(flashlightOn ? 0.26 : 0.44))
+                        .saturation(0.45)
+                        .blur(radius: 24)
+                        .overlay(Color.black.opacity(0.4))
                 } else {
                     LinearGradient(
                         colors: [Color.black, Color(red: 0.12, green: 0.14, blue: 0.18)],
@@ -86,216 +114,148 @@ struct ScanView: View {
                         endPoint: .bottom
                     )
                 }
-
-                RoundedRectangle(cornerRadius: 280, style: .continuous)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white.opacity(flashlightOn ? 0.18 : 0.04), .clear],
-                            center: .center,
-                            startRadius: 24,
-                            endRadius: 420
-                        )
-                    )
-                    .scaleEffect(1.35)
-
-                LinearGradient(
-                    colors: [Color.black.opacity(0.72), Color.clear, Color.black.opacity(0.82)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-
-                cameraFeedDecor
             }
             .ignoresSafeArea()
         }
     }
 
-    private var cameraFeedDecor: some View {
-        VStack {
-            HStack(spacing: 18) {
-                feedPill(width: 124)
-                Spacer()
-                feedPill(width: 74)
-            }
-            .padding(.horizontal, 28)
-            .padding(.top, 104)
-
-            Spacer()
-
-            HStack(spacing: 14) {
-                feedThumbnail(imageName: "products.flakes.kosmostars", angle: -7)
-                feedThumbnail(imageName: "products.flakes.khrutka", angle: 3)
-                feedThumbnail(imageName: "products.flakes.oreo", angle: 8)
-                feedThumbnail(imageName: "products.flakes.redprice", angle: -5)
-            }
-            .padding(.bottom, 164)
-        }
-    }
-
-    private func feedPill(width: CGFloat) -> some View {
-        Capsule(style: .continuous)
-            .fill(Color.white.opacity(0.08))
-            .frame(width: width, height: 16)
-            .blur(radius: 0.5)
-    }
-
-    private func feedThumbnail(imageName: String, angle: Double) -> some View {
-        ProductImageView(imageName: imageName, width: 62, height: 90, cornerRadius: 20)
-            .rotationEffect(.degrees(angle))
-            .opacity(0.58)
-            .blur(radius: 0.4)
-    }
-
-    private var scannerContent: some View {
+    private var scannerChrome: some View {
         GeometryReader { geometry in
             VStack(spacing: 0) {
-                topBar
+                topOverlay
                 Spacer(minLength: 24)
-                scannerFrame(width: min(geometry.size.width - 48, 320))
+                scanFrame(width: min(geometry.size.width - 64, 306))
                 Spacer()
-                bottomPanel
+                bottomStatus
             }
             .padding(.horizontal, 20)
-            .padding(.top, 14)
-            .padding(.bottom, 96)
+            .padding(.top, 10)
+            .padding(.bottom, 86)
         }
     }
 
-    private var topBar: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("scan.camera.badge")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.76))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.white.opacity(0.12), in: Capsule(style: .continuous))
-
-                Text("scan.title")
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-            }
-
+    private var topOverlay: some View {
+        HStack {
             Spacer()
-
             Button {
-                flashlightOn.toggle()
+                toggleFlashlight()
             } label: {
                 Image(systemName: flashlightOn ? "flashlight.on.fill" : "flashlight.off.fill")
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(flashlightOn ? AppTheme.orange : .white)
-                    .frame(width: 52, height: 52)
+                    .frame(width: 54, height: 54)
                     .background(
                         Circle()
-                            .fill(Color.white.opacity(0.14))
-                            .overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
+                            .fill(.ultraThinMaterial)
                     )
+                    .overlay(
+                        Circle()
+                            .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+                    )
+                    .shadow(color: Color.black.opacity(0.14), radius: 16, x: 0, y: 10)
             }
             .buttonStyle(.plain)
             .disabled(cameraPermission.status != .granted)
         }
+        .padding(.top, 4)
     }
 
-    private func scannerFrame(width: CGFloat) -> some View {
-        VStack(spacing: 18) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 34, style: .continuous)
-                    .fill(Color.black.opacity(0.16))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 34, style: .continuous)
-                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                    )
-                    .frame(width: width, height: 208)
+    private func scanFrame(width: CGFloat) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .fill(Color.black.opacity(0.14))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 30, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
+                .frame(width: width, height: 212)
 
-                ScannerCornerMarks(color: scanPhase == .found ? AppTheme.green : AppTheme.orange)
-                    .frame(width: width, height: 208)
+            ScannerCornerMarks(color: scanAccentColor)
+                .frame(width: width, height: 212)
 
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(scanPhase == .found ? AppTheme.green.opacity(0.92) : AppTheme.orange.opacity(0.92), style: StrokeStyle(lineWidth: 2, dash: [12, 8]))
-                    .frame(width: width - 42, height: 154)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(scanAccentColor.opacity(0.96), style: StrokeStyle(lineWidth: 2, dash: [12, 8]))
+                .frame(width: width - 44, height: 154)
 
-                if scanPhase != .idle {
-                    Rectangle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.clear, scanPhase == .found ? AppTheme.green : AppTheme.orange, Color.clear],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
+            GeometryReader { geometry in
+                let lineOffset = -geometry.size.height / 2 + 40 + (geometry.size.height - 80) * scanLineProgress
+
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.clear, scanAccentColor, Color.clear],
+                            startPoint: .leading,
+                            endPoint: .trailing
                         )
-                        .frame(width: width - 54, height: 4)
-                        .shadow(color: (scanPhase == .found ? AppTheme.green : AppTheme.orange).opacity(0.45), radius: 16, x: 0, y: 4)
-                        .transition(.opacity)
-                }
-
-                VStack(spacing: 10) {
-                    Image(systemName: "barcode.viewfinder")
-                        .font(.system(size: 38, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.92))
-                    Text("scan.align.caption")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.72))
-                }
+                    )
+                    .frame(height: 4)
+                    .shadow(color: scanAccentColor.opacity(0.38), radius: 16, x: 0, y: 6)
+                    .opacity(scanPhase == .idle ? 0 : 1)
+                    .offset(y: lineOffset)
+                    .animation(.easeInOut(duration: 0.15), value: scanPhase)
             }
+            .frame(width: width - 44, height: 154)
+            .clipped()
 
-            Text(scanPhase == .found ? "scan.align.detected" : "scan.align.center")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.white.opacity(0.92))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-        }
-    }
-
-    private var bottomPanel: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("scan.camera.demo")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                    Text("scan.camera.demo.subtitle")
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.72))
-                }
-                Spacer()
-                if let remaining = store.freeScansRemaining {
-                    Text(store.localized("scan.free.remaining", remaining))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppTheme.orange)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(AppTheme.orange.opacity(0.14), in: Capsule(style: .continuous))
-                }
-            }
-
-            if let account = store.currentAccount, let profile = store.currentProfile {
-                Text(store.localized("scan.status.user", "\(account.firstName) \(account.lastName)", profile.name))
+            VStack(spacing: 10) {
+                Image(systemName: "barcode.viewfinder")
+                    .font(.system(size: 38, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.92))
+                Text("scan.align.caption")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.76))
             }
+        }
+    }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(targets) { product in
-                        Button {
-                            triggerManualScan(product)
-                        } label: {
-                            ProductImageView(imageName: product.imageName, width: 66, height: 94, cornerRadius: 18)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+    private var bottomStatus: some View {
+        HStack(spacing: 10) {
+            Image(systemName: scanPhase == .idle ? "camera.aperture" : "waveform.path.ecg.rectangle")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(scanPhase == .found ? AppTheme.green : AppTheme.orange)
+
+            Text(scanStatusText)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.white.opacity(0.92))
+                .lineLimit(2)
+
+            Spacer(minLength: 10)
+
+            if let remaining = store.freeScansRemaining {
+                Text(store.localized("scan.free.remaining", remaining))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppTheme.orange)
             }
         }
-        .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
-                )
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(.ultraThinMaterial, in: Capsule(style: .continuous))
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(Color.white.opacity(0.16), lineWidth: 1)
         )
+    }
+
+    private var scanAccentColor: Color {
+        switch scanPhase {
+        case .idle:
+            return AppTheme.orange
+        case .scanning:
+            return AppTheme.orange
+        case .found:
+            return AppTheme.green
+        }
+    }
+
+    private var scanStatusText: String {
+        switch scanPhase {
+        case .idle:
+            return store.localized("scan.camera.ready")
+        case .scanning:
+            return store.localized("scan.camera.scanning")
+        case .found:
+            return store.localized("scan.align.detected")
+        }
     }
 
     private var loadingState: some View {
@@ -361,6 +321,8 @@ struct ScanView: View {
             return
         }
 
+        cameraSession.start()
+
         guard selectedEvaluation == nil else { return }
         startScanning()
     }
@@ -369,19 +331,35 @@ struct ScanView: View {
         guard isAutoScanActive else { return }
         scanTask?.cancel()
         scanPhase = .idle
+        scanLineProgress = 0
 
         scanTask = Task {
             try? await Task.sleep(for: .seconds(3))
             guard !Task.isCancelled else { return }
             let isStillActive = await MainActor.run { isAutoScanActive }
             guard isStillActive else { return }
+
             await MainActor.run {
-                scanPhase = .found
+                scanPhase = .scanning
+                scanLineProgress = 0
+                withAnimation(.easeInOut(duration: 0.95)) {
+                    scanLineProgress = 1
+                }
             }
-            try? await Task.sleep(for: .milliseconds(650))
+
+            try? await Task.sleep(for: .milliseconds(1050))
             guard !Task.isCancelled else { return }
             let isReadyForResult = await MainActor.run { isAutoScanActive }
             guard isReadyForResult else { return }
+
+            await MainActor.run {
+                scanPhase = .found
+                scanLineProgress = 0.5
+            }
+
+            try? await Task.sleep(for: .milliseconds(260))
+            guard !Task.isCancelled else { return }
+
             await MainActor.run {
                 triggerManualScan()
             }
@@ -397,13 +375,19 @@ struct ScanView: View {
         let product = forcedProduct ?? store.nextMockScanProduct()
         selectedEvaluation = store.scanProduct(product)
         scanPhase = .idle
+        scanLineProgress = 0
     }
 
     private func stopScanning(resetResult: Bool) {
         scanTask?.cancel()
         scanTask = nil
         scanPhase = .idle
-        flashlightOn = false
+        scanLineProgress = 0
+        if flashlightOn {
+            flashlightOn = false
+            cameraSession.setTorch(enabled: false)
+        }
+        cameraSession.stop()
         if resetResult {
             selectedEvaluation = nil
         }
@@ -411,6 +395,11 @@ struct ScanView: View {
 
     private var isAutoScanActive: Bool {
         cameraPermission.status == .granted && store.selectedTab == .scan && scenePhase == .active && selectedEvaluation == nil
+    }
+
+    private func toggleFlashlight() {
+        flashlightOn.toggle()
+        cameraSession.setTorch(enabled: flashlightOn)
     }
 
     private func openSettings() {
@@ -421,6 +410,7 @@ struct ScanView: View {
 
 private enum ScanPhase {
     case idle
+    case scanning
     case found
 }
 
@@ -453,7 +443,7 @@ private struct ScannerCornerMarks: View {
                 path.addLine(to: CGPoint(x: width, y: height - cornerLength))
             }
             .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
-            .shadow(color: color.opacity(0.28), radius: 16, x: 0, y: 0)
+            .shadow(color: color.opacity(0.24), radius: 16, x: 0, y: 0)
         }
     }
 }
