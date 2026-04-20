@@ -7,11 +7,12 @@ final class AppStore: ObservableObject {
     @Published var hasSeenOnboarding: Bool
     @Published var language: AppLanguage
     @Published var selectedTab: AppTab = .scan
-    @Published private(set) var profiles: [UserProfile]
-    @Published private(set) var currentProfileID: UUID?
+    @Published private(set) var accounts: [UserAccount]
+    @Published private(set) var currentAccountID: UUID?
 
     private let defaults: UserDefaults
     private let productService: MockProductService
+    private let profileService: MockProfileService
     private let analyticsService: MockAnalyticsService
     private let subscriptionService: MockSubscriptionService
 
@@ -30,46 +31,55 @@ final class AppStore: ObservableObject {
         let resolvedSubscriptionService = subscriptionService ?? MockSubscriptionService()
 
         self.productService = resolvedProductService
+        self.profileService = resolvedProfileService
         self.analyticsService = resolvedAnalyticsService
         self.subscriptionService = resolvedSubscriptionService
-        let initialProfiles = resolvedProfileService.makeProfiles()
 
+        let initialAccounts = resolvedProfileService.makeAccounts()
         let savedLanguage = AppLanguage(rawValue: defaults.string(forKey: StorageKey.language) ?? "") ?? .english
-        let defaultProfile = initialProfiles.first
-        let defaultProfileID = defaultProfile?.id
-        let savedProfileID = defaults.string(forKey: StorageKey.currentProfileID).flatMap(UUID.init(uuidString:))
-        let resolvedProfileID = initialProfiles.contains(where: { $0.id == savedProfileID }) ? savedProfileID : defaultProfileID
+        let defaultAccountID = initialAccounts.first?.id
+        let savedAccountID = defaults.string(forKey: StorageKey.currentAccountID).flatMap(UUID.init(uuidString:))
+        let resolvedAccountID = initialAccounts.contains(where: { $0.id == savedAccountID }) ? savedAccountID : defaultAccountID
         let initialHasSeenOnboarding = defaults.object(forKey: StorageKey.hasSeenOnboarding) as? Bool ?? false
         let initialLanguage: AppLanguage
 
         if defaults.object(forKey: StorageKey.language) == nil,
-           let currentProfile = initialProfiles.first(where: { $0.id == resolvedProfileID }) {
-            initialLanguage = currentProfile.preferredLanguage
+           let currentAccount = initialAccounts.first(where: { $0.id == resolvedAccountID }) {
+            initialLanguage = currentAccount.preferredLanguage
         } else {
             initialLanguage = savedLanguage
         }
 
-        self.profiles = initialProfiles
-        self.currentProfileID = resolvedProfileID
+        self.accounts = initialAccounts
+        self.currentAccountID = resolvedAccountID
         self.hasSeenOnboarding = initialHasSeenOnboarding
         self.language = initialLanguage
     }
 
+    var currentAccount: UserAccount? {
+        guard let currentAccountID else { return nil }
+        return accounts.first(where: { $0.id == currentAccountID })
+    }
+
     var currentProfile: UserProfile? {
-        guard let currentProfileID else { return nil }
-        return profiles.first(where: { $0.id == currentProfileID })
+        guard let account = currentAccount else { return nil }
+        return account.profiles.first(where: { $0.id == account.activeProfileID }) ?? account.profiles.first
+    }
+
+    var availableAccounts: [UserAccount] {
+        accounts
     }
 
     var availableProfiles: [UserProfile] {
-        profiles
+        currentAccount?.profiles ?? []
     }
 
     var isSignedIn: Bool {
-        currentProfile != nil
+        currentAccount != nil
     }
 
     var currentTier: SubscriptionTier {
-        currentProfile?.tier ?? .free
+        currentAccount?.tier ?? .free
     }
 
     var currentScanHistory: [ScanRecord] {
@@ -81,11 +91,11 @@ final class AppStore: ObservableObject {
     }
 
     var freeScansRemaining: Int? {
-        guard let currentProfile, currentProfile.tier == .free else { return nil }
+        guard let currentAccount, currentAccount.tier == .free, let currentProfile else { return nil }
         let monthlyCount = currentProfile.scanHistory.filter {
             Calendar.current.isDate($0.scannedAt, equalTo: .now, toGranularity: .month)
         }.count
-        return max(0, (currentProfile.monthlyScanLimit ?? 20) - monthlyCount)
+        return max(0, (currentAccount.monthlyScanLimit ?? 20) - monthlyCount)
     }
 
     func completeOnboarding() {
@@ -107,18 +117,34 @@ final class AppStore: ObservableObject {
         LocalizationService.string(key, language: language, arguments: arguments)
     }
 
-    func signIn(as profileID: UUID) {
-        guard profiles.contains(where: { $0.id == profileID }) else { return }
-        currentProfileID = profileID
-        defaults.set(profileID.uuidString, forKey: StorageKey.currentProfileID)
-        if let profile = currentProfile {
-            switchLanguage(profile.preferredLanguage)
+    func signIn(as accountID: UUID) {
+        guard accounts.contains(where: { $0.id == accountID }) else { return }
+        currentAccountID = accountID
+        defaults.set(accountID.uuidString, forKey: StorageKey.currentAccountID)
+        if let account = currentAccount {
+            switchLanguage(account.preferredLanguage)
         }
     }
 
     func logout() {
-        currentProfileID = nil
-        defaults.removeObject(forKey: StorageKey.currentProfileID)
+        currentAccountID = nil
+        defaults.removeObject(forKey: StorageKey.currentAccountID)
+    }
+
+    func switchActiveProfile(_ profileID: UUID) {
+        updateCurrentAccount { account in
+            guard account.profiles.contains(where: { $0.id == profileID }) else { return }
+            account.activeProfileID = profileID
+        }
+    }
+
+    func addSecondaryProfile() {
+        updateCurrentAccount { account in
+            guard account.profiles.count < 2 else { return }
+            let newProfile = profileService.makeAdditionalProfile(for: account)
+            account.profiles.append(newProfile)
+            account.activeProfileID = newProfile.id
+        }
     }
 
     func product(for barcode: String) -> Product? {
@@ -130,9 +156,8 @@ final class AppStore: ObservableObject {
     }
 
     func scanProduct(_ product: Product) -> ProductEvaluation {
-        if let currentProfileID, let index = profiles.firstIndex(where: { $0.id == currentProfileID }) {
-            let record = ScanRecord(productBarcode: product.barcode, scannedAt: .now)
-            profiles[index].scanHistory.insert(record, at: 0)
+        updateCurrentProfile { profile in
+            profile.scanHistory.insert(ScanRecord(productBarcode: product.barcode, scannedAt: .now), at: 0)
         }
         return evaluation(for: product)
     }
@@ -143,8 +168,9 @@ final class AppStore: ObservableObject {
     }
 
     func deleteHistoryRecord(_ recordID: UUID) {
-        guard let currentProfileID, let index = profiles.firstIndex(where: { $0.id == currentProfileID }) else { return }
-        profiles[index].scanHistory.removeAll { $0.id == recordID }
+        updateCurrentProfile { profile in
+            profile.scanHistory.removeAll { $0.id == recordID }
+        }
     }
 
     func analyticsReport(period: AnalyticsPeriod, category: ProductCategory?) -> AnalyticsReport {
@@ -162,57 +188,115 @@ final class AppStore: ObservableObject {
     }
 
     func setTier(_ tier: SubscriptionTier) {
-        guard let currentProfileID, let index = profiles.firstIndex(where: { $0.id == currentProfileID }) else { return }
-        profiles[index].tier = tier
+        updateCurrentAccount { account in
+            account.tier = tier
+        }
     }
 
-    func toggleAllergy(_ ingredient: IngredientToken) {
-        updateIngredient(ingredient, keyPath: \.allergies)
+    func togglePreference(_ preference: HealthPreference, in category: HealthPreferenceCategory) {
+        updateCurrentProfile { profile in
+            switch category {
+            case .allergies:
+                toggle(preference, in: &profile.allergies)
+            case .intolerances:
+                toggle(preference, in: &profile.intolerances)
+            case .avoidIngredients:
+                toggle(preference, in: &profile.avoidIngredients)
+            }
+        }
     }
 
-    func toggleIntolerance(_ ingredient: IngredientToken) {
-        updateIngredient(ingredient, keyPath: \.intolerances)
+    func addCustomPreference(_ value: String, to category: HealthPreferenceCategory) {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        togglePreference(.custom(trimmed), in: category)
     }
 
-    func toggleAvoidedIngredient(_ ingredient: IngredientToken) {
-        updateIngredient(ingredient, keyPath: \.avoidedIngredients)
+    func deletePreference(_ preferenceID: UUID, from category: HealthPreferenceCategory) {
+        updateCurrentProfile { profile in
+            switch category {
+            case .allergies:
+                profile.allergies.removeAll { $0.id == preferenceID }
+            case .intolerances:
+                profile.intolerances.removeAll { $0.id == preferenceID }
+            case .avoidIngredients:
+                profile.avoidIngredients.removeAll { $0.id == preferenceID }
+            }
+        }
     }
 
-    func toggleAvoidedCategory(_ category: ProductCategory) {
-        guard let currentProfileID, let index = profiles.firstIndex(where: { $0.id == currentProfileID }) else { return }
-        if profiles[index].avoidedCategories.contains(category) {
-            profiles[index].avoidedCategories.removeAll { $0 == category }
-        } else {
-            profiles[index].avoidedCategories.append(category)
+    func suggestions(for category: HealthPreferenceCategory, query: String) -> [HealthPreference] {
+        let normalized = HealthPreference.normalized(query)
+        let base = category.suggestionTokens.map(HealthPreference.predefined)
+        guard !normalized.isEmpty else { return base }
+
+        return base.filter { preference in
+            let localizedTitle = localized(preference.titleKey ?? "")
+            return localizedTitle.localizedCaseInsensitiveContains(query) || preference.token.localizedCaseInsensitiveContains(normalized)
+        }
+    }
+
+    func toggleGlutenSensitivity() {
+        updateCurrentProfile { profile in
+            profile.glutenSensitivity.toggle()
+        }
+    }
+
+    func toggleSugarTracking() {
+        updateCurrentProfile { profile in
+            profile.sugarTracking.toggle()
         }
     }
 
     func resetProfilePreferences() {
-        guard let currentProfileID, let index = profiles.firstIndex(where: { $0.id == currentProfileID }) else { return }
-        let freshProfile = MockProfileService().makeProfiles().first(where: { $0.id == currentProfileID })
-        guard let freshProfile else { return }
-        profiles[index].allergies = freshProfile.allergies
-        profiles[index].intolerances = freshProfile.intolerances
-        profiles[index].avoidedIngredients = freshProfile.avoidedIngredients
-        profiles[index].avoidedCategories = freshProfile.avoidedCategories
+        guard let currentAccountID, let currentProfileID = currentProfile?.id else { return }
+        let freshAccount = profileService.makeAccounts().first(where: { $0.id == currentAccountID })
+
+        if let freshProfile = freshAccount?.profiles.first(where: { $0.id == currentProfileID }) {
+            updateCurrentProfile { profile in
+                profile.allergies = freshProfile.allergies
+                profile.intolerances = freshProfile.intolerances
+                profile.avoidIngredients = freshProfile.avoidIngredients
+                profile.glutenSensitivity = freshProfile.glutenSensitivity
+                profile.sugarTracking = freshProfile.sugarTracking
+            }
+        } else {
+            updateCurrentProfile { profile in
+                profile.allergies = []
+                profile.intolerances = []
+                profile.avoidIngredients = []
+                profile.glutenSensitivity = false
+                profile.sugarTracking = false
+            }
+        }
     }
 
-    private func updateIngredient(
-        _ ingredient: IngredientToken,
-        keyPath: WritableKeyPath<UserProfile, [IngredientToken]>
-    ) {
-        guard let currentProfileID, let index = profiles.firstIndex(where: { $0.id == currentProfileID }) else { return }
-        if profiles[index][keyPath: keyPath].contains(ingredient) {
-            profiles[index][keyPath: keyPath].removeAll { $0 == ingredient }
+    private func updateCurrentAccount(_ update: (inout UserAccount) -> Void) {
+        guard let currentAccountID, let index = accounts.firstIndex(where: { $0.id == currentAccountID }) else { return }
+        update(&accounts[index])
+    }
+
+    private func updateCurrentProfile(_ update: (inout UserProfile) -> Void) {
+        guard
+            let currentAccountID,
+            let accountIndex = accounts.firstIndex(where: { $0.id == currentAccountID }),
+            let profileIndex = accounts[accountIndex].profiles.firstIndex(where: { $0.id == accounts[accountIndex].activeProfileID })
+        else { return }
+        update(&accounts[accountIndex].profiles[profileIndex])
+    }
+
+    private func toggle(_ preference: HealthPreference, in array: inout [HealthPreference]) {
+        if let index = array.firstIndex(where: { $0.token == preference.token }) {
+            array.remove(at: index)
         } else {
-            profiles[index][keyPath: keyPath].append(ingredient)
+            array.append(preference)
         }
     }
 
     private enum StorageKey {
         static let hasSeenOnboarding = "goodchoice.hasSeenOnboarding"
         static let language = "goodchoice.language"
-        static let currentProfileID = "goodchoice.currentProfileID"
+        static let currentAccountID = "goodchoice.currentAccountID"
     }
 }
 

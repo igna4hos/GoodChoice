@@ -5,6 +5,7 @@ struct HistoryView: View {
 
     @State private var sortOption: HistorySortOption = .date
     @State private var selectedEvaluation: ProductEvaluation?
+    @State private var searchText = ""
 
     var body: some View {
         Group {
@@ -36,6 +37,7 @@ struct HistoryView: View {
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
                 .background(AppTheme.background)
+                .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: Text("history.search.placeholder"))
             } else {
                 signedOutState
             }
@@ -86,12 +88,19 @@ struct HistoryView: View {
         .padding(.top, 20)
     }
 
-    private var sections: [HistorySection] {
+    private var filteredRecords: [ScanRecord] {
         let records = store.currentScanHistory
+        guard !searchText.isEmpty else { return records }
+        return records.filter { record in
+            guard let product = store.product(for: record.productBarcode) else { return false }
+            return store.localized(product.nameKey).localizedCaseInsensitiveContains(searchText)
+        }
+    }
 
+    private var sections: [HistorySection] {
         switch sortOption {
         case .date:
-            let grouped = Dictionary(grouping: records) { Calendar.current.startOfDay(for: $0.scannedAt) }
+            let grouped = Dictionary(grouping: filteredRecords) { Calendar.current.startOfDay(for: $0.scannedAt) }
             return grouped.keys.sorted(by: >).map { date in
                 HistorySection(
                     title: date.formatted(.dateTime.weekday(.wide).day().month()),
@@ -99,19 +108,16 @@ struct HistoryView: View {
                 )
             }
         case .category:
-            let grouped = Dictionary(grouping: records) { record in
+            let grouped = Dictionary(grouping: filteredRecords) { record in
                 store.product(for: record.productBarcode)?.category ?? .food
             }
             return ProductCategory.allCases.compactMap { category in
                 let rows = grouped[category] ?? []
                 guard !rows.isEmpty else { return nil }
-                return HistorySection(
-                    title: store.localized(category.titleKey),
-                    records: rows.sorted { $0.scannedAt > $1.scannedAt }
-                )
+                return HistorySection(title: store.localized(category.titleKey), records: rows.sorted { $0.scannedAt > $1.scannedAt })
             }
         case .name:
-            let sorted = records.sorted {
+            let sorted = filteredRecords.sorted {
                 let left = store.localized(store.product(for: $0.productBarcode)?.nameKey ?? "")
                 let right = store.localized(store.product(for: $1.productBarcode)?.nameKey ?? "")
                 return left < right

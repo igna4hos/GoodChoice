@@ -1,28 +1,45 @@
 import SwiftUI
+import UIKit
 
 struct ScanView: View {
     @EnvironmentObject private var store: AppStore
+    @StateObject private var cameraPermission = CameraPermissionService()
 
-    @State private var isAnimating = false
+    @State private var flashlightOn = false
     @State private var selectedEvaluation: ProductEvaluation?
-    @State private var autoScanTask: Task<Void, Never>?
+    @State private var scanTask: Task<Void, Never>?
+    @State private var scanPhase: ScanPhase = .idle
+
+    private var targets: [Product] {
+        store.products.filter { $0.kind == .flakes }
+    }
 
     var body: some View {
         ZStack {
             AppTheme.background.ignoresSafeArea()
 
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 22) {
-                    scannerHeader
-                    scannerFrame
-                    statusPanel
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 12)
-                .padding(.bottom, 32)
+            switch cameraPermission.status {
+            case .idle, .requesting:
+                loadingState
+            case .denied:
+                permissionDeniedState
+            case .granted:
+                scannerContent
             }
         }
         .navigationTitle(Text("scan.title"))
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    flashlightOn.toggle()
+                } label: {
+                    Image(systemName: flashlightOn ? "flashlight.on.fill" : "flashlight.off.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(flashlightOn ? AppTheme.orange : .primary)
+                }
+                .disabled(cameraPermission.status != .granted)
+            }
+        }
         .sheet(item: $selectedEvaluation) { evaluation in
             ProductEvaluationSheet(
                 evaluation: evaluation,
@@ -39,43 +56,64 @@ struct ScanView: View {
             .environmentObject(store)
         }
         .task {
-            startScanning()
+            await cameraPermission.requestAccessIfNeeded()
+            if cameraPermission.status == .granted {
+                startScanning()
+            }
         }
         .onDisappear {
-            autoScanTask?.cancel()
+            scanTask?.cancel()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            cameraPermission.refresh()
+            if cameraPermission.status == .granted {
+                startScanning()
+            }
+        }
+    }
+
+    private var scannerContent: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 22) {
+                scannerHeader
+                scannerFrame
+                targetsShelf
+                statusPanel
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 32)
         }
     }
 
     private var scannerHeader: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            PremiumCard(padding: 20) {
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("scan.hero.title")
-                                .font(.title2.bold())
-                            Text("scan.hero.subtitle")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        if let remaining = store.freeScansRemaining {
-                            Text(store.localized("scan.free.remaining", remaining))
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(AppTheme.orange)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(
-                                    Capsule(style: .continuous)
-                                        .fill(AppTheme.orange.opacity(0.12))
-                                )
-                        }
+        PremiumCard(padding: 20) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("scan.hero.title")
+                            .font(.title2.bold())
+                        Text("scan.hero.subtitle")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
+                    Spacer()
+                    if let remaining = store.freeScansRemaining {
+                        Text(store.localized("scan.free.remaining", remaining))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppTheme.orange)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(AppTheme.orange.opacity(0.12))
+                            )
+                    }
+                }
 
-                    HStack(spacing: 10) {
-                        statusChip(icon: "person.badge.shield.checkmark", text: store.localized(store.currentTier.titleKey), tint: AppTheme.green)
-                        statusChip(icon: "globe", text: store.localized(store.language.titleKey), tint: AppTheme.orange)
-                    }
+                HStack(spacing: 10) {
+                    statusChip(icon: "person.badge.shield.checkmark", text: store.localized(store.currentTier.titleKey), tint: AppTheme.green)
+                    statusChip(icon: "camera.metering.center.weighted", text: store.localized("scan.status.alignment"), tint: AppTheme.orange)
                 }
             }
         }
@@ -87,89 +125,167 @@ struct ScanView: View {
                 RoundedRectangle(cornerRadius: 30, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [
-                                Color(red: 0.12, green: 0.14, blue: 0.18),
-                                Color(red: 0.17, green: 0.22, blue: 0.20)
-                            ],
+                            colors: flashlightOn
+                                ? [Color(red: 0.20, green: 0.24, blue: 0.28), Color(red: 0.28, green: 0.32, blue: 0.29)]
+                                : [Color(red: 0.12, green: 0.14, blue: 0.18), Color(red: 0.17, green: 0.22, blue: 0.20)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
-                    .frame(height: 420)
+                    .frame(height: 430)
+
+                RoundedRectangle(cornerRadius: 30, style: .continuous)
+                    .fill(Color.white.opacity(flashlightOn ? 0.05 : 0.0))
+                    .frame(height: 430)
 
                 RoundedRectangle(cornerRadius: 28, style: .continuous)
                     .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                    .frame(height: 420)
+                    .frame(height: 430)
 
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .stroke(AppTheme.orange.opacity(0.9), style: StrokeStyle(lineWidth: 2, dash: [14, 10]))
-                    .padding(42)
+                alignmentArea
 
-                VStack {
-                    if isAnimating {
-                        Rectangle()
-                            .fill(
-                                LinearGradient(
-                                    colors: [Color.clear, AppTheme.green.opacity(0.85), Color.clear],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
+                if scanPhase != .idle {
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.clear, scanPhase == .found ? AppTheme.green : AppTheme.orange, Color.clear],
+                                startPoint: .leading,
+                                endPoint: .trailing
                             )
-                            .frame(height: 4)
-                            .offset(y: 20)
-                            .padding(.horizontal, 54)
-                            .offset(y: isAnimating ? 104 : -104)
-                            .animation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true), value: isAnimating)
-                    }
-                    Spacer()
+                        )
+                        .frame(height: 4)
+                        .padding(.horizontal, 54)
+                        .offset(y: scanPhase == .found ? 0 : -6)
+                        .animation(.easeInOut(duration: 0.7), value: scanPhase)
                 }
-                .frame(height: 300)
 
-                VStack(spacing: 18) {
+                VStack(spacing: 16) {
                     Spacer()
-                    barcodeHint(labelKey: "scan.mock.oat")
-                    barcodeHint(labelKey: "scan.mock.cleaner")
-                    barcodeHint(labelKey: "scan.mock.sunscreen")
+                    Text("scan.align.title")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                    Text(scanPhase == .found ? "scan.align.detected" : "scan.align.message")
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.72))
+                        .multilineTextAlignment(.center)
                     Spacer()
                 }
-                .padding(.horizontal, 26)
+                .padding(.horizontal, 40)
             }
-            .overlay(alignment: .bottom) {
-                HStack(spacing: 12) {
-                    Button {
-                        triggerManualScan()
-                    } label: {
-                        Label("scan.action.detect", systemImage: "sparkles")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
+        }
+    }
+
+    private var alignmentArea: some View {
+        VStack {
+            Spacer()
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .stroke(scanPhase == .found ? AppTheme.green : AppTheme.orange, style: StrokeStyle(lineWidth: 2, dash: [14, 10]))
+                .frame(width: 270, height: 178)
+                .overlay {
+                    VStack(spacing: 10) {
+                        Image(systemName: "barcode.viewfinder")
+                            .font(.system(size: 34, weight: .semibold))
+                            .foregroundStyle(scanPhase == .found ? AppTheme.green : AppTheme.orange)
+                        Text("scan.align.caption")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.75))
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(AppTheme.orange)
                 }
-                .padding(18)
+            Spacer()
+        }
+    }
+
+    private var targetsShelf: some View {
+        PremiumCard(padding: 20) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("scan.targets.title")
+                    .font(.headline)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(targets) { product in
+                            Button {
+                                triggerManualScan(product)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    ProductImageView(imageName: product.imageName, width: 112, height: 112, cornerRadius: 22)
+                                    Text(store.localized(product.nameKey))
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.primary)
+                                        .frame(width: 112, alignment: .leading)
+                                        .lineLimit(2)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
             }
         }
     }
 
     private var statusPanel: some View {
         PremiumCard(padding: 22) {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 12) {
                 Text("scan.status.title")
                     .font(.headline)
 
-                if store.isSignedIn {
+                if let account = store.currentAccount, let profile = store.currentProfile {
+                    Text(store.localized("scan.status.user", "\(account.firstName) \(account.lastName)", profile.name))
+                        .font(.subheadline.weight(.semibold))
                     Text("scan.status.message")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    Text(store.localized("scan.status.user", store.localized(store.currentProfile?.nameKey ?? "")))
-                        .font(.subheadline.weight(.semibold))
                 } else {
                     Text("scan.signedOut")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
             }
+        }
+    }
+
+    private var loadingState: some View {
+        VStack(spacing: 18) {
+            ProgressView()
+                .progressViewStyle(.circular)
+            Text("scan.permission.requesting")
+                .font(.headline)
+            Text("scan.permission.message")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+        }
+    }
+
+    private var permissionDeniedState: some View {
+        VStack {
+            PremiumCard(padding: 24) {
+                VStack(spacing: 16) {
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: 32, weight: .semibold))
+                        .foregroundStyle(AppTheme.orange)
+                    Text("scan.permission.denied.title")
+                        .font(.title3.bold())
+                    Text("scan.permission.denied.message")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+
+                    Button {
+                        openSettings()
+                    } label: {
+                        Text("scan.permission.openSettings")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(AppTheme.premiumGradient, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
         }
     }
 
@@ -188,36 +304,18 @@ struct ScanView: View {
         )
     }
 
-    private func barcodeHint(labelKey: String) -> some View {
-        Button(action: triggerManualScan) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(LocalizedStringKey(labelKey))
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                    Text("scan.mock.tap")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.72))
-                }
-                Spacer()
-                Image(systemName: "barcode.viewfinder")
-                    .foregroundStyle(AppTheme.orange)
-                    .font(.system(size: 24, weight: .semibold))
-            }
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(Color.white.opacity(0.08))
-            )
-        }
-        .buttonStyle(.plain)
-    }
-
     private func startScanning() {
-        isAnimating = true
-        autoScanTask?.cancel()
-        autoScanTask = Task {
-            try? await Task.sleep(for: .seconds(5))
+        guard cameraPermission.status == .granted else { return }
+        scanTask?.cancel()
+        scanPhase = .idle
+
+        scanTask = Task {
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                scanPhase = .found
+            }
+            try? await Task.sleep(for: .milliseconds(650))
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 triggerManualScan()
@@ -225,13 +323,24 @@ struct ScanView: View {
         }
     }
 
-    private func triggerManualScan() {
-        autoScanTask?.cancel()
+    private func triggerManualScan(_ forcedProduct: Product? = nil) {
+        scanTask?.cancel()
         guard store.isSignedIn else {
             store.selectedTab = .profile
             return
         }
-        let product = store.nextMockScanProduct()
+        let product = forcedProduct ?? store.nextMockScanProduct()
         selectedEvaluation = store.scanProduct(product)
+        scanPhase = .idle
     }
+
+    private func openSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
+}
+
+private enum ScanPhase {
+    case idle
+    case found
 }

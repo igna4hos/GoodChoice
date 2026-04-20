@@ -9,13 +9,7 @@ struct HistoryRowView: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(AppTheme.heroGradient)
-                .frame(width: 54, height: 54)
-                .overlay {
-                    Image(systemName: product.category.systemImage)
-                        .foregroundStyle(AppTheme.orange)
-                }
+            ProductImageView(imageName: product.imageName, width: 54, height: 54, cornerRadius: 16)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(store.localized(product.nameKey))
@@ -29,7 +23,6 @@ struct HistoryRowView: View {
             }
 
             Spacer()
-
             ScoreBadgeView(score: evaluation.personalizedScore)
         }
         .padding(.vertical, 6)

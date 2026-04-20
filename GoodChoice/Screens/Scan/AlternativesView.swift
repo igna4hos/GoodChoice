@@ -3,19 +3,15 @@ import SwiftUI
 struct AlternativesView: View {
     @EnvironmentObject private var store: AppStore
 
-    let products: [Product]
+    let alternatives: [EvaluatedAlternative]
 
     var body: some View {
         NavigationStack {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 16) {
-                    ForEach(products) { product in
-                        let evaluation = store.evaluation(for: product)
-                        ProductCardView(
-                            product: product,
-                            score: evaluation.personalizedScore,
-                            detail: store.localized(product.descriptionKey)
-                        )
+                    ForEach(alternatives) { alternative in
+                        AlternativeRowView(alternative: alternative)
+                            .environmentObject(store)
                     }
                 }
                 .padding(20)

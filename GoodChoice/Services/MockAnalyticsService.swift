@@ -1,8 +1,6 @@
 import Foundation
 
 final class MockAnalyticsService {
-    typealias Localize = (String, CVarArg) -> String
-
     func report(
         for profile: UserProfile?,
         period: AnalyticsPeriod,
@@ -46,11 +44,10 @@ final class MockAnalyticsService {
         .sorted { $0.scanCount > $1.scanCount }
 
         let topCategory = categoryAnalytics.first?.category
-        let frequentProducts = topProducts(from: evaluatedHistory).prefix(3).map { $0 }
+        let frequentProducts = topProducts(from: evaluatedHistory).prefix(4).map { $0 }
         let trend = makeTrend(from: evaluatedHistory, period: period)
         let scoreDelta = calculateDelta(from: trend)
         let insights = makeInsights(
-            evaluatedHistory: evaluatedHistory,
             averageScore: averageScore,
             healthyCount: healthyCount,
             riskyCount: riskyCount,
@@ -83,9 +80,9 @@ final class MockAnalyticsService {
         let periodFiltered = history.filter { record in
             switch period {
             case .week:
-                return record.scannedAt >= calendar.date(byAdding: .day, value: -7, to: .now) ?? .distantPast
+                return record.scannedAt >= (calendar.date(byAdding: .day, value: -7, to: .now) ?? .distantPast)
             case .month:
-                return record.scannedAt >= calendar.date(byAdding: .month, value: -1, to: .now) ?? .distantPast
+                return record.scannedAt >= (calendar.date(byAdding: .month, value: -1, to: .now) ?? .distantPast)
             case .allTime:
                 return true
             }
@@ -106,10 +103,7 @@ final class MockAnalyticsService {
             return FrequentProduct(product: first.1.product, count: count, averageScore: average)
         }
         .sorted { lhs, rhs in
-            if lhs.count == rhs.count {
-                return lhs.averageScore > rhs.averageScore
-            }
-            return lhs.count > rhs.count
+            lhs.count == rhs.count ? lhs.averageScore > rhs.averageScore : lhs.count > rhs.count
         }
     }
 
@@ -119,9 +113,7 @@ final class MockAnalyticsService {
 
         switch period {
         case .week:
-            grouped = Dictionary(grouping: entries) {
-                calendar.startOfDay(for: $0.0.scannedAt)
-            }
+            grouped = Dictionary(grouping: entries) { calendar.startOfDay(for: $0.0.scannedAt) }
         case .month:
             grouped = Dictionary(grouping: entries) {
                 let components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: $0.0.scannedAt)
@@ -152,7 +144,6 @@ final class MockAnalyticsService {
     }
 
     private func makeInsights(
-        evaluatedHistory: [(ScanRecord, ProductEvaluation)],
         averageScore: Int,
         healthyCount: Int,
         riskyCount: Int,
@@ -160,25 +151,27 @@ final class MockAnalyticsService {
         scoreDelta: Int,
         localization: @escaping (String, CVarArg...) -> String
     ) -> [AnalyticsInsight] {
-        var items: [AnalyticsInsight] = []
-
-        items.append(
+        var items: [AnalyticsInsight] = [
             AnalyticsInsight(
                 icon: "arrow.up.right.circle.fill",
-                tint: .green,
+                tint: scoreDelta >= 0 ? .green : .red,
                 title: localization("analytics.insight.score.title"),
-                message: localization(
-                    scoreDelta >= 0 ? "analytics.insight.score.up" : "analytics.insight.score.down",
-                    abs(scoreDelta)
-                ),
+                message: localization(scoreDelta >= 0 ? "analytics.insight.score.up" : "analytics.insight.score.down", abs(scoreDelta)),
+                isPremiumOnly: false
+            ),
+            AnalyticsInsight(
+                icon: riskyCount == 0 ? "checkmark.seal.fill" : "exclamationmark.triangle.fill",
+                tint: riskyCount == 0 ? .green : .orange,
+                title: localization("analytics.insight.risk.title"),
+                message: localization(riskyCount == 0 ? "analytics.insight.risk.none" : "analytics.insight.risk.some", riskyCount),
                 isPremiumOnly: false
             )
-        )
+        ]
 
         if let topCategory {
             items.append(
                 AnalyticsInsight(
-                    icon: "square.grid.2x2.fill",
+                    icon: "chart.pie.fill",
                     tint: .orange,
                     title: localization("analytics.insight.category.title"),
                     message: localization("analytics.insight.category.message", localization(topCategory.titleKey)),
@@ -189,24 +182,21 @@ final class MockAnalyticsService {
 
         items.append(
             AnalyticsInsight(
-                icon: riskyCount <= max(1, healthyCount / 2) ? "checkmark.seal.fill" : "exclamationmark.triangle.fill",
-                tint: riskyCount <= max(1, healthyCount / 2) ? .green : .red,
-                title: localization("analytics.insight.risk.title"),
-                message: localization(
-                    riskyCount == 0 ? "analytics.insight.risk.none" : "analytics.insight.risk.some",
-                    riskyCount
-                ),
-                isPremiumOnly: false
-            )
-        )
-
-        items.append(
-            AnalyticsInsight(
                 icon: "sparkles",
                 tint: .orange,
                 title: localization("analytics.insight.premium.title"),
                 message: localization("analytics.insight.premium.message", averageScore),
                 isPremiumOnly: true
+            )
+        )
+
+        items.append(
+            AnalyticsInsight(
+                icon: healthyCount >= max(1, riskyCount) ? "leaf.fill" : "scope",
+                tint: healthyCount >= max(1, riskyCount) ? .green : .orange,
+                title: localization("analytics.insight.balance.title"),
+                message: localization("analytics.insight.balance.message", healthyCount),
+                isPremiumOnly: false
             )
         )
 

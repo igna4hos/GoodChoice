@@ -10,27 +10,20 @@ struct ProductCardView: View {
     var body: some View {
         PremiumCard(padding: 18) {
             HStack(alignment: .top, spacing: 14) {
-                Image(systemName: product.category.systemImage)
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(AppTheme.orange)
-                    .frame(width: 42, height: 42)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(AppTheme.orange.opacity(0.12))
-                    )
+                ProductImageView(imageName: product.imageName)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .top) {
+                    HStack(alignment: .top, spacing: 8) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(store.localized(product.nameKey))
                                 .font(.headline)
-
+                                .fixedSize(horizontal: false, vertical: true)
                             Text(store.localized(product.category.titleKey))
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
 
-                        Spacer()
+                        Spacer(minLength: 8)
                         ScoreBadgeView(score: score)
                     }
 

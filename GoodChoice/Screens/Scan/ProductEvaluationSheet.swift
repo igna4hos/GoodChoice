@@ -31,6 +31,8 @@ struct ProductEvaluationSheet: View {
                                     .foregroundStyle(.secondary)
                             }
 
+                            ProductImageView(imageName: evaluation.product.imageName, width: 120, height: 120, cornerRadius: 28)
+
                             Text(summaryText)
                                 .font(.subheadline)
                                 .multilineTextAlignment(.center)
@@ -44,47 +46,9 @@ struct ProductEvaluationSheet: View {
                         detail: store.localized(evaluation.product.descriptionKey)
                     )
 
-                    PremiumCard(padding: 20) {
-                        VStack(alignment: .leading, spacing: 14) {
-                            Text("scan.reasoning.title")
-                                .font(.headline)
-
-                            ForEach(reasonTexts, id: \.self) { reason in
-                                HStack(alignment: .top, spacing: 10) {
-                                    Image(systemName: "exclamationmark.circle.fill")
-                                        .foregroundStyle(AppTheme.orange)
-                                    Text(reason)
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                    Spacer()
-                                }
-                            }
-
-                            if reasonTexts.isEmpty {
-                                Text("scan.reasoning.safe")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-
-                    PremiumCard(padding: 20) {
-                        VStack(alignment: .leading, spacing: 14) {
-                            Text("scan.points.title")
-                                .font(.headline)
-
-                            ForEach(evaluation.positives, id: \.self) { key in
-                                HStack(alignment: .top, spacing: 10) {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(AppTheme.green)
-                                    Text(store.localized(key))
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                    Spacer()
-                                }
-                            }
-                        }
-                    }
+                    detailsCard
+                    reasoningCard
+                    positivesCard
 
                     Button {
                         isShowingAlternatives = true
@@ -101,7 +65,7 @@ struct ProductEvaluationSheet: View {
             }
             .background(AppTheme.background.ignoresSafeArea())
             .sheet(isPresented: $isShowingAlternatives) {
-                AlternativesView(products: evaluation.alternativeProducts)
+                AlternativesView(alternatives: evaluation.alternatives)
                     .environmentObject(store)
             }
             .toolbar(.hidden, for: .navigationBar)
@@ -115,6 +79,76 @@ struct ProductEvaluationSheet: View {
             controlButton(icon: "xmark", titleKey: "action.close", action: onClose)
             controlButton(icon: "camera.viewfinder", titleKey: "scan.action.continue", action: onContinueScanning)
             controlButton(icon: "clock", titleKey: "scan.action.history", action: onShowHistory)
+        }
+    }
+
+    private var detailsCard: some View {
+        PremiumCard(padding: 20) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("scan.details.title")
+                    .font(.headline)
+
+                switch evaluation.product.details {
+                case .food(let nutrition):
+                    nutritionRow(titleKey: "scan.detail.calories", value: "\(nutrition.calories)")
+                    nutritionRow(titleKey: "scan.detail.proteins", value: formattedGram(nutrition.proteins))
+                    nutritionRow(titleKey: "scan.detail.fats", value: formattedGram(nutrition.fats))
+                    nutritionRow(titleKey: "scan.detail.carbs", value: formattedGram(nutrition.carbohydrates))
+                    if let sugar = nutrition.sugar {
+                        nutritionRow(titleKey: "scan.detail.sugar", value: "\(sugar) g")
+                    }
+                case .care(let details):
+                    nutritionRow(titleKey: "scan.detail.type", value: store.localized(details.typeKey))
+                    nutritionRow(titleKey: "scan.detail.audience", value: store.localized(details.audienceKey))
+                    nutritionRow(titleKey: "scan.detail.purpose", value: store.localized(details.purposeKey))
+                }
+            }
+        }
+    }
+
+    private var reasoningCard: some View {
+        PremiumCard(padding: 20) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("scan.reasoning.title")
+                    .font(.headline)
+
+                if reasonTexts.isEmpty {
+                    Text("scan.reasoning.safe")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(reasonTexts, id: \.self) { reason in
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .foregroundStyle(AppTheme.orange)
+                            Text(reason)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var positivesCard: some View {
+        PremiumCard(padding: 20) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("scan.points.title")
+                    .font(.headline)
+
+                ForEach(evaluation.positives, id: \.self) { key in
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(AppTheme.green)
+                        Text(store.localized(key))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                }
+            }
         }
     }
 
@@ -139,40 +173,58 @@ struct ProductEvaluationSheet: View {
         .buttonStyle(.plain)
     }
 
+    private func nutritionRow(titleKey: String, value: String) -> some View {
+        HStack {
+            Text(LocalizedStringKey(titleKey))
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .fontWeight(.semibold)
+        }
+        .font(.subheadline)
+    }
+
+    private func formattedGram(_ value: Double) -> String {
+        String(format: "%.1f g", value)
+    }
+
     private var reasonTexts: [String] {
         evaluation.warnings.map { reason in
-            switch reason {
-            case .allergy(let ingredient):
-                return store.localized("reason.allergy", store.localized(ingredient.titleKey))
-            case .intolerance(let ingredient):
-                return store.localized("reason.intolerance", store.localized(ingredient.titleKey))
-            case .avoidedIngredient(let ingredient):
-                return store.localized("reason.avoidIngredient", store.localized(ingredient.titleKey))
-            case .avoidedCategory(let category):
-                return store.localized("reason.avoidCategory", store.localized(category.titleKey))
+            switch reason.kind {
+            case .allergy:
+                return store.localized("reason.allergy", displayTitle(for: reason))
+            case .intolerance:
+                return store.localized("reason.intolerance", displayTitle(for: reason))
+            case .avoidIngredient:
+                return store.localized("reason.avoidIngredient", displayTitle(for: reason))
+            case .glutenSensitivity:
+                return store.localized("reason.glutenSensitivity")
+            case .sugarTracking:
+                return store.localized("reason.sugarTracking", reason.numericValue ?? 0)
             }
         }
     }
 
+    private func displayTitle(for reason: EvaluationReason) -> String {
+        if let titleKey = reason.titleKey {
+            return store.localized(titleKey)
+        }
+        return reason.customValue ?? store.localized("profile.custom.unknown")
+    }
+
     private var summaryText: String {
-        if evaluation.warnings.contains(where: {
-            if case .allergy = $0 { return true }
-            return false
-        }) {
+        if evaluation.warnings.contains(where: { $0.kind == .allergy }) {
             return store.localized("scan.summary.allergy")
         }
-
-        if evaluation.warnings.contains(where: {
-            if case .intolerance = $0 { return true }
-            return false
-        }) {
-            return store.localized("scan.summary.intolerance")
+        if evaluation.warnings.contains(where: { $0.kind == .glutenSensitivity }) {
+            return store.localized("scan.summary.gluten")
         }
-
+        if evaluation.warnings.contains(where: { $0.kind == .sugarTracking }) {
+            return store.localized("scan.summary.sugar")
+        }
         if !evaluation.warnings.isEmpty {
             return store.localized("scan.summary.warning")
         }
-
         return store.localized("scan.summary.safe")
     }
 }

@@ -18,6 +18,7 @@ struct AnalyticsView: View {
                 if store.isSignedIn {
                     header
                     summaryCards
+                    pieChartCard
                     trendCard
                     categoryCard
                     insightGrid
@@ -31,6 +32,18 @@ struct AnalyticsView: View {
         }
         .background(AppTheme.background.ignoresSafeArea())
         .navigationTitle(Text("analytics.title"))
+        .toolbar {
+            if store.currentTier == .free {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showingPaywall = true
+                    } label: {
+                        Image(systemName: "crown.fill")
+                            .foregroundStyle(AppTheme.orange)
+                    }
+                }
+            }
+        }
         .sheet(isPresented: $showingPaywall) {
             PaywallView()
                 .environmentObject(store)
@@ -76,6 +89,47 @@ struct AnalyticsView: View {
                 detail: store.localized("analytics.card.risky.detail"),
                 tint: AppTheme.orange
             )
+        }
+    }
+
+    private var pieChartCard: some View {
+        PremiumCard(padding: 20) {
+            VStack(alignment: .leading, spacing: 18) {
+                Text("analytics.pie.title")
+                    .font(.headline)
+
+                if report.categoryAnalytics.isEmpty {
+                    Text("analytics.empty")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Chart(report.categoryAnalytics) { item in
+                        SectorMark(
+                            angle: .value("Scans", item.scanCount),
+                            innerRadius: .ratio(0.55),
+                            angularInset: 2.5
+                        )
+                        .foregroundStyle(color(for: item.category))
+                    }
+                    .frame(height: 220)
+
+                    VStack(spacing: 10) {
+                        ForEach(report.categoryAnalytics) { item in
+                            HStack {
+                                Circle()
+                                    .fill(color(for: item.category))
+                                    .frame(width: 10, height: 10)
+                                Text(store.localized(item.category.titleKey))
+                                    .font(.subheadline)
+                                Spacer()
+                                Text(store.localized("analytics.category.count", item.scanCount))
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -149,10 +203,6 @@ struct AnalyticsView: View {
                             }
                         }
                         .frame(height: 10)
-
-                        Text(store.localized("analytics.category.count", item.scanCount))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -188,7 +238,9 @@ struct AnalyticsView: View {
                     .font(.headline)
 
                 ForEach(report.frequentProducts) { item in
-                    HStack {
+                    HStack(spacing: 12) {
+                        ProductImageView(imageName: item.product.imageName, width: 48, height: 48, cornerRadius: 14)
+
                         VStack(alignment: .leading, spacing: 4) {
                             Text(store.localized(item.product.nameKey))
                                 .font(.subheadline.weight(.semibold))
@@ -248,6 +300,14 @@ struct AnalyticsView: View {
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func color(for category: ProductCategory) -> Color {
+        switch category {
+        case .food: return AppTheme.green
+        case .household: return AppTheme.orange
+        case .cosmetics: return Color(red: 0.96, green: 0.45, blue: 0.34)
         }
     }
 }

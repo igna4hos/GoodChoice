@@ -17,6 +17,16 @@ struct SettingsView: View {
                 .pickerStyle(.segmented)
             }
 
+            if let account = store.currentAccount {
+                Section("settings.profileSwitch.title") {
+                    ForEach(account.profiles) { profile in
+                        Button(profile.name) {
+                            store.switchActiveProfile(profile.id)
+                        }
+                    }
+                }
+            }
+
             Section("settings.demo.title") {
                 Button("settings.demo.resetOnboarding") {
                     store.resetOnboarding()
