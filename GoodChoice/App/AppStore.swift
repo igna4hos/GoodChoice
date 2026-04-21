@@ -15,6 +15,7 @@ final class AppStore: ObservableObject {
     private let profileService: MockProfileService
     private let analyticsService: MockAnalyticsService
     private let subscriptionService: MockSubscriptionService
+    private var localeChangeCancellable: AnyCancellable?
 
     init(
         defaults: UserDefaults = .standard,
@@ -36,24 +37,30 @@ final class AppStore: ObservableObject {
         self.subscriptionService = resolvedSubscriptionService
 
         let initialAccounts = resolvedProfileService.makeAccounts()
-        let savedLanguage = AppLanguage(rawValue: defaults.string(forKey: StorageKey.language) ?? "") ?? .english
+        let savedLanguage = AppLanguage(rawValue: defaults.string(forKey: StorageKey.language) ?? "")
         let defaultAccountID = initialAccounts.first?.id
         let savedAccountID = defaults.string(forKey: StorageKey.currentAccountID).flatMap(UUID.init(uuidString:))
         let resolvedAccountID = initialAccounts.contains(where: { $0.id == savedAccountID }) ? savedAccountID : defaultAccountID
         let initialHasSeenOnboarding = defaults.object(forKey: StorageKey.hasSeenOnboarding) as? Bool ?? false
+        let hasSavedLanguage = defaults.object(forKey: StorageKey.language) != nil
+        let hasManualLanguageOverride = defaults.bool(forKey: StorageKey.manualLanguageOverride)
+        let hasManualLanguageOverrideRecord = defaults.object(forKey: StorageKey.manualLanguageOverride) != nil
         let initialLanguage: AppLanguage
 
-        if defaults.object(forKey: StorageKey.language) == nil,
-           let currentAccount = initialAccounts.first(where: { $0.id == resolvedAccountID }) {
-            initialLanguage = currentAccount.preferredLanguage
+        if hasManualLanguageOverride || (!hasManualLanguageOverrideRecord && hasSavedLanguage) {
+            initialLanguage = savedLanguage ?? .english
+            defaults.set(true, forKey: StorageKey.manualLanguageOverride)
         } else {
-            initialLanguage = savedLanguage
+            initialLanguage = AppLanguage.preferredSystemLanguage()
+            defaults.set(initialLanguage.rawValue, forKey: StorageKey.language)
+            defaults.set(false, forKey: StorageKey.manualLanguageOverride)
         }
 
         self.accounts = initialAccounts
         self.currentAccountID = resolvedAccountID
         self.hasSeenOnboarding = initialHasSeenOnboarding
         self.language = initialLanguage
+        observeLocaleChanges()
     }
 
     var currentAccount: UserAccount? {
@@ -109,8 +116,7 @@ final class AppStore: ObservableObject {
     }
 
     func switchLanguage(_ language: AppLanguage) {
-        self.language = language
-        defaults.set(language.rawValue, forKey: StorageKey.language)
+        setLanguage(language, isManualOverride: true)
     }
 
     func localized(_ key: String, _ arguments: CVarArg...) -> String {
@@ -121,9 +127,6 @@ final class AppStore: ObservableObject {
         guard accounts.contains(where: { $0.id == accountID }) else { return }
         currentAccountID = accountID
         defaults.set(accountID.uuidString, forKey: StorageKey.currentAccountID)
-        if let account = currentAccount {
-            switchLanguage(account.preferredLanguage)
-        }
     }
 
     func logout() {
@@ -293,9 +296,31 @@ final class AppStore: ObservableObject {
         }
     }
 
+    private func observeLocaleChanges() {
+        localeChangeCancellable = NotificationCenter.default
+            .publisher(for: NSLocale.currentLocaleDidChangeNotification)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    self?.applySystemLanguageIfNeeded()
+                }
+            }
+    }
+
+    private func applySystemLanguageIfNeeded() {
+        guard !defaults.bool(forKey: StorageKey.manualLanguageOverride) else { return }
+        setLanguage(AppLanguage.preferredSystemLanguage(), isManualOverride: false)
+    }
+
+    private func setLanguage(_ language: AppLanguage, isManualOverride: Bool) {
+        self.language = language
+        defaults.set(language.rawValue, forKey: StorageKey.language)
+        defaults.set(isManualOverride, forKey: StorageKey.manualLanguageOverride)
+    }
+
     private enum StorageKey {
         static let hasSeenOnboarding = "goodchoice.hasSeenOnboarding"
         static let language = "goodchoice.language"
+        static let manualLanguageOverride = "goodchoice.manualLanguageOverride"
         static let currentAccountID = "goodchoice.currentAccountID"
     }
 }
